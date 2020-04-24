@@ -83,9 +83,9 @@ foreach ($instanceAgent in $instanceAgents)
 	#Wait for task to complete
 	while ((get-SCOMTaskResult -BatchID $taskInstance.BatchId | select -ExpandProperty Status) -ne "Succeeded")
 	{
-	    write-Host "Waiting…" -ForegroundColor Yellow
+		write-Host "Waiting…" -ForegroundColor Yellow
 		write-host  "task status: " (get-SCOMTaskResult -BatchID $taskInstance.BatchId | select -ExpandProperty Status)
-	    Sleep -Seconds 2
+		Sleep -Seconds 2
 	}
 	
 	#Show task output
