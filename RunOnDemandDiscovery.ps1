@@ -19,7 +19,7 @@ if ($task -eq $null)
 }
 #Load SCOM Discoveries and allow user to select one
 Write-Host "Loading SCOM Discoveries..." -ForegroundColor Yellow
-$discovery = Get-SCOMDiscovery | Select-Object -Property DisplayName,Description,Id | Out-GridView -PassThru -Title "Select Discovery" | Select-Object -First 1 | ForEach-Object {Get-SCOMDiscovery -Id $_.Id}
+$discovery = Get-SCOMDiscovery | Select-Object -Property DisplayName,Description,Id | Out-GridView -PassThru -Title "Select Discovery" | Select-Object -First 1 | Get-SCOMDiscovery -Id $_.Id
 
 #Check if discovery is selected
 if ($discovery -ne $null)
