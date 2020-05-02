@@ -1,2 +1,2 @@
 # SCOM-OnDemandDiscovery
-A script to trigger SCOM Discoveries on demand
+An interactive script to trigger SCOM Discoveries on demand
