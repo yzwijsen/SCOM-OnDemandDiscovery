@@ -1,5 +1,12 @@
 #import scom module
 Import-Module OperationsManager
+
+# Load SCOM powershell module
+$checksnap = Get-Module | Where-Object {$_.name -eq "OperationsManager"}
+if ($checksnap.name -ne "OperationsManager")
+    {
+        Import-Module -name "C:\Program Files\Microsoft System Center 2016\Operations Manager\Powershell\OperationsManager"
+    }
 	
 function Exit-WithMessage($message)
 {
@@ -19,7 +26,7 @@ if ($task -eq $null)
 }
 #Load SCOM Discoveries and allow user to select one
 Write-Host "Loading SCOM Discoveries..." -ForegroundColor Yellow
-$discovery = Get-SCOMDiscovery | Select-Object -Property DisplayName,Description,Id | Out-GridView -PassThru -Title "Select Discovery" | Select-Object -First 1 | Get-SCOMDiscovery -Id $_.Id
+$discovery = Get-SCOMDiscovery | Select-Object -Property DisplayName,Description,Id | Out-GridView -PassThru -Title "Select Discovery" | Select-Object -First 1 | ForEach-Object {Get-SCOMDiscovery -Id $_.Id}
 
 #Check if discovery is selected
 if ($discovery -ne $null)
@@ -38,7 +45,8 @@ $instanceAgents = get-scomclass -name Microsoft.SystemCenter.HealthService | get
 #Check if at least one agent is selected
 if ($instanceAgents -ne $null)
 {
-	Write-Host "Selected:"
+	$agentCount = $instanceAgents.Count
+	Write-Host "Selected $agentCount agents:"
 	foreach ($agent in $instanceAgents)
 	{
 		Write-Host $agent.DisplayName
@@ -53,12 +61,15 @@ else
 Write-Host "Getting Target Class Instances..." -ForegroundColor Yellow
 $classInstances = Get-SCOMClass -Id $discovery.Target.Id | Get-SCOMClassInstance
 
+$failedDiscoveries = @()
+
 #Loop through all selected agents and generate a task for each one
-Write-Host "Creating Tasks..." -ForegroundColor Yellow	
+Write-Host "Creating Tasks..." -ForegroundColor Yellow
+$i = 1
 foreach ($instanceAgent in $instanceAgents)
 {
 	Write-Host "##########################################################"
-	Write-Host "Agent: $($instanceAgent.DisplayName)"
+	Write-Host "Agent: $($instanceAgent.DisplayName)  ($i of $agentCount)"
 	Write-Host "Gathering Additional Data..." -ForegroundColor Yellow
 		
 	#match target class isntance to agent selected by user
@@ -78,19 +89,53 @@ foreach ($instanceAgent in $instanceAgents)
 	Write-Host "Starting Task..." -ForegroundColor Yellow
 	$taskInstance = start-scomtask -task $task -instance $instanceAgent -override $override
 
-	write-host  "task status: " (get-SCOMTaskResult -BatchID $taskInstance.BatchId | select -ExpandProperty Status)
+	write-host  "task status:" (get-SCOMTaskResult -BatchID $taskInstance.BatchId | select -ExpandProperty Status)
 
 	#Wait for task to complete
+	$j = 1
 	while ((get-SCOMTaskResult -BatchID $taskInstance.BatchId | select -ExpandProperty Status) -ne "Succeeded")
 	{
-		write-Host "Waiting…" -ForegroundColor Yellow
-		write-host  "task status: " (get-SCOMTaskResult -BatchID $taskInstance.BatchId | select -ExpandProperty Status)
+	    write-Host "Waiting..." -ForegroundColor Yellow
+		$taskStatus = (get-SCOMTaskResult -BatchID $taskInstance.BatchId | select -ExpandProperty Status)
+		write-host  "task status: $taskStatus" 
+		if ($taskStatus -eq "Failed" -or $j -gt 10) {Break}
+	    $j++
 		Sleep -Seconds 2
+		
 	}
 	
+	Write-Host "task status: Completed"
+	
 	#Show task output
-	get-SCOMTaskResult -BatchID $taskInstance.BatchId
+	Write-Host "Checking task output..." -ForegroundColor Yellow
+	$result = ""
+	$result = get-SCOMTaskResult -BatchID $taskInstance.BatchId | Select-Object -ExpandProperty Output
+	if ($result -like "*<Result>SUCCESS</Result>*")
+	{
+		Write-Host "Discovery triggered successfully" -ForegroundColor Green
+	}
+	else
+	{
+		Write-Host "Discovery failed to trigger" -ForegroundColor Red
+		Write-Host "Output: $result"
+		$failedDiscoveries += $instanceAgent
+	}
+	
+	$i++
+	Start-Sleep 2
 }
 
 Write-Host "Done!" -ForegroundColor Green
+$failedCount = 0                                     
+$failedCount = $failedDiscoveries.Count
+
+if ($failedCount -ne 0)
+{
+	Write-Host "$failedCount failed discoveries!" -ForegroundColor Red
+	foreach ($failedDiscovery in $failedDiscoveries)
+	{
+		Write-Host $failedDiscovery.DisplayName
+	}
+}
+
 Read-Host "Press Enter to Exit"
